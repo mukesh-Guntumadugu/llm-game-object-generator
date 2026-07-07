@@ -1,0 +1,4 @@
+# Core requirements for API calls and image processing
+requests
+pillow
+python-dotenv
