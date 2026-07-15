@@ -22,6 +22,22 @@ Generating functional game objects requires a two-step generation pipeline:
 3. **Image-to-Object (Data Extraction)**
    Instead of relying solely on text prompts, you can provide a reference image. The orchestrator will extract the style and concept from the image (using Vision-Language models like LLaVA) and construct the game object based on it.
 
+## Supported Art Styles
+
+To ensure consistency in game engine integration, this pipeline will support multiple visual styles. However, to achieve maximum precision, **we are focusing on and mastering one style at a time**:
+
+1. **2D Pixel Art (CURRENT FOCUS):** Retro 2D sprites with visible pixel grids, flat coloring, and bold outlines (similar to Stardew Valley, Celeste).
+2. **2D Vector / Hand-drawn:** Clean vector curves, smooth cartoon shading, and digital illustrations (similar to Hollow Knight, Cuphead).
+3. **3D Low-Poly:** Chunky, geometric models with a low polygon count; often uses flat colors (similar to Old School RuneScape, classic PS1 games).
+4. **3D Realistic / High-Poly:** Highly detailed models designed to closely mimic real life and physics (similar to The Last of Us, Cyberpunk 2077).
+5. **3D Cel-Shaded / Stylized:** 3D models shaded to look like a 2D comic book or cartoon (similar to Breath of the Wild, Borderlands).
+6. **Voxels:** 3D cubes stacked together to create objects (similar to Minecraft, Crossy Road).
+7. **2.5D / Isometric:** 2D sprites drawn and angled to give the illusion of 3D depth (similar to classic Fallout, Hades, Diablo).
+8. **Particle Systems:** Collections of tiny, moving images or meshes used to create visual effects (similar to fire, smoke, rain, explosions).
+
+> [!NOTE]
+> **Current Pipeline Focus:** We are currently conquering and optimizing for **Style 1: 2D Pixel Art**. All prompt templates, SDXL checkpoints, and post-processing tools (including background removal) are tuned for clean 2D pixel-art assets.
+
 ## Initial Setup
 
 1. **Clone the repository** (if applicable).

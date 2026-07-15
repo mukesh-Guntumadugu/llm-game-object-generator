@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Game Object Sandbox & Tester</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="glass-bg"></div>
+    <div class="app-container">
+        <!-- Header -->
+        <header>
+            <div class="logo">
+                <span class="pulse-dot"></span>
+                <h1>LLM GAME OBJECT SANDBOX</h1>
+            </div>
+            <div class="subtitle">Engine-Agnostic Asset Validation Environment</div>
+        </header>
+
+        <!-- Main Workspace -->
+        <div class="workspace">
+            <!-- Sidebar: Asset List -->
+            <aside class="sidebar card">
+                <h2>Generated Assets</h2>
+                <div class="assets-list" id="assets-list">
+                    <div class="loading-text">Scanning generated_assets/ ...</div>
+                </div>
+                <div class="refresh-container">
+                    <button class="btn btn-secondary" id="refresh-btn">Refresh Assets</button>
+                </div>
+            </aside>
+
+            <!-- Center: Interactive Game Sandbox -->
+            <main class="sandbox-container card">
+                <div class="card-header">
+                    <h2 id="sandbox-title">2D Game Sandbox</h2>
+                    <div class="controls-status">
+                        <button class="view-toggle-btn" id="view-mode-btn" style="display: none;">Switch to 3D View</button>
+                        <span class="badge" id="focus-badge">Click to Focus Keyboard Controls</span>
+                    </div>
+                </div>
+                
+                <div class="canvas-wrapper">
+                    <canvas id="game-canvas" width="600" height="400"></canvas>
+                    <div id="three-container" style="width: 600px; height: 400px; display: none; border-radius: 8px; overflow: hidden;"></div>
+                    <div class="instruction-overlay" id="movement-instructions">
+                        Use <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> or <span class="key">↑</span><span class="key">↓</span><span class="key">←</span><span class="key">→</span> to move sprite
+                    </div>
+                </div>
+
+                <div class="sandbox-toolbar">
+                    <label class="toggle-container" id="grid-toggle-wrapper">
+                        <input type="checkbox" id="toggle-grid" checked>
+                        <span class="checkmark"></span>
+                        Show Grid
+                    </label>
+                    <label class="toggle-container" id="hitbox-toggle-wrapper">
+                        <input type="checkbox" id="toggle-hitbox" checked>
+                        <span class="checkmark"></span>
+                        Show Hitbox
+                    </label>
+                    <label class="toggle-container">
+                        <input type="checkbox" id="toggle-white-bg">
+                        <span class="checkmark"></span>
+                        White Background
+                    </label>
+                    <label class="toggle-container">
+                        <input type="checkbox" id="toggle-sound" checked>
+                        <span class="checkmark"></span>
+                        Play Sound FX
+                    </label>
+                </div>
+            </main>
+
+            <!-- Right: Object Inspector & Metadata -->
+            <aside class="inspector card">
+                <h2>Asset Inspector</h2>
+                <div id="inspector-content" class="inspector-content empty">
+                    <div class="empty-message">Select an asset from the sidebar to inspect and test.</div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Three.js CDN and loaders for 3D model support -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

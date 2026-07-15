@@ -1,0 +1,24 @@
+# Python virtual environment
+.venv/
+__pycache__/
+*.pyc
+
+# Local environment secrets
+.env
+
+# Generated batch output folder
+generated_assets/
+
+# Generated logs/csv results
+results.csv
+prompts.csv
+
+# Standalone generated images and JSONs in the root
+*.png
+*.json
+*.obj
+*.mtl
+TripoSR_weights/
+test_output/
+dataset/
+

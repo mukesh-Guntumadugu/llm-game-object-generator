@@ -1,0 +1,42 @@
+HOW TO PROCEDURALLY MODEL A CHEST IN BLENDER USING PYTHON (bpy)
+
+When asked to model a "chest", DO NOT just spawn a single cube or sphere. You must combine multiple primitives. Here is a concrete code example of how to build a basic chest structure using `bpy.ops.mesh`:
+
+```python
+import bpy
+
+# 1. Base of the chest
+bpy.ops.mesh.primitive_cube_add(size=2, location=(0, 0, 1))
+base = bpy.context.active_object
+base.name = "ChestBase"
+base.scale = (1.5, 1.0, 1.0) # Wider on the X axis, rectangular
+
+# 2. Lid of the chest (curved)
+# A simple way to make a curved lid without complex bmesh is to add a cylinder, rotate it sideways, and scale it.
+bpy.ops.mesh.primitive_cylinder_add(radius=1.0, depth=3.0, location=(0, 0, 2))
+lid = bpy.context.active_object
+lid.name = "ChestLid"
+lid.rotation_euler = (0, 1.5708, 0) # Rotate 90 degrees around Y axis
+lid.scale = (1.0, 1.0, 0.5) # Flatten it slightly so it matches the base width
+
+# 3. Lock / Latch
+bpy.ops.mesh.primitive_cube_add(size=0.5, location=(0, 1.0, 2.0))
+lock = bpy.context.active_object
+lock.name = "ChestLock"
+lock.scale = (0.5, 0.2, 0.5)
+
+# 4. Apply Materials
+mat_wood = bpy.data.materials.new(name="WoodMaterial")
+mat_wood.use_nodes = True
+mat_wood.node_tree.nodes["Principled BSDF"].inputs[0].default_value = (0.4, 0.2, 0.05, 1) # Brown
+base.data.materials.append(mat_wood)
+lid.data.materials.append(mat_wood)
+
+mat_metal = bpy.data.materials.new(name="MetalMaterial")
+mat_metal.use_nodes = True
+mat_metal.node_tree.nodes["Principled BSDF"].inputs[0].default_value = (0.8, 0.7, 0.2, 1) # Gold/Brass
+mat_metal.node_tree.nodes["Principled BSDF"].inputs["Metallic"].default_value = 1.0
+lock.data.materials.append(mat_metal)
+```
+
+Use this mathematical structure (Base -> Lid -> Details -> Materials) when writing scripts for any chest-like object!
