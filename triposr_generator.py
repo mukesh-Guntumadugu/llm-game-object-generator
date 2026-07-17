@@ -42,9 +42,9 @@ def generate_triposr_mesh(image_path, output_dir, prefix):
     with torch.no_grad():
         scene_codes = model([image], device=device)
         
-    print("[*] Extracting Marching Cubes Mesh...")
-    # Extract the mesh
-    meshes = model.extract_mesh(scene_codes, True)
+    print("[*] Extracting High-Resolution Marching Cubes Mesh...")
+    # Extract the mesh with GPU-optimized parameters for maximum fidelity
+    meshes = model.extract_mesh(scene_codes, True, resolution=256, threshold=25.0)
     
     # Save the raw TripoSR mesh with vertex colors
     raw_obj_path = os.path.join(output_dir, f"{prefix}_model.obj")

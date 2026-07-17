@@ -33,46 +33,114 @@ def pixelate_image_fallback(image_path: str, output_path: str, pixel_size: int =
         print(f"[!] Fallback pixelation failed: {e}")
         return False
 
-def create_mock_sprite(prompt: str, output_filename: str):
-    """Creates a mock RGBA sprite with a colored geometric shape on a transparent background."""
-    print(f"[*] Creating transparent mock sprite shape for: '{prompt}'")
-    img = Image.new('RGBA', (512, 512), (0, 0, 0, 0))
+def create_mock_sprite(prompt: str, output_filename: str, llm_model: str = "qwen2.5-coder:7b-instruct-fp16"):
+    """
+    Creates a 2D sprite by asking the LLM to decide the correct colors and shape.
+    No hardcoded keyword logic - the model thinks for itself.
+    """
     from PIL import ImageDraw
     import math
+    import json
+    import re
+
+    print(f"[*] Asking LLM to design the sprite colors and shape for: '{prompt}'")
+
+    # Ask the LLM to return a structured JSON color/shape plan
+    color_query = f"""You are a pixel art game asset color designer.
+For the game object described below, output a JSON object describing how to draw it.
+
+Object: "{prompt}"
+
+Return ONLY a JSON object with this exact structure, no explanation:
+{{
+  "shape": "round" | "tall" | "wide" | "shield",
+  "body_color": [R, G, B],
+  "detail_color": [R, G, B],
+  "accent_color": [R, G, B],
+  "has_stem": true | false,
+  "stem_color": [R, G, B],
+  "has_leaf": true | false,
+  "leaf_color": [R, G, B]
+}}
+
+Use realistic, vivid colors appropriate for the object. Do not use red for everything."""
+
+    design = None
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={"model": llm_model, "prompt": color_query, "stream": False},
+            timeout=20
+        )
+        raw = response.json().get("response", "")
+        # Extract JSON from the response
+        match = re.search(r'\{.*\}', raw, re.DOTALL)
+        if match:
+            design = json.loads(match.group())
+    except Exception as e:
+        print(f"[!] LLM color design failed ({e}), using fallback colors.")
+
+    # Fallback if LLM fails
+    if not design:
+        design = {
+            "shape": "round",
+            "body_color": [180, 80, 50],
+            "detail_color": [220, 120, 80],
+            "accent_color": [240, 200, 150],
+            "has_stem": False,
+            "stem_color": [101, 67, 33],
+            "has_leaf": False,
+            "leaf_color": [46, 139, 87]
+        }
+
+    def rgb(key): return tuple(design.get(key, [128, 128, 128]) + [255])
+
+    body_color = rgb("body_color")
+    detail_color = rgb("detail_color")
+    accent_color = rgb("accent_color")
+    shape = design.get("shape", "round")
+
+    print(f"[+] LLM chose shape='{shape}', body={body_color[:3]}, detail={detail_color[:3]}")
+
+    img = Image.new('RGBA', (512, 512), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    
-    prompt_lower = prompt.lower()
-    if "apple" in prompt_lower:
-        color = (196, 50, 50, 255) # Red
-        # Draw apple body (two overlapping circles for a stylized apple shape)
-        draw.ellipse([150, 160, 330, 370], fill=color)
-        draw.ellipse([190, 160, 370, 370], fill=color)
-        # Draw stem
-        draw.rectangle([245, 90, 265, 170], fill=(101, 67, 33, 255))
-        # Draw leaf
-        draw.ellipse([265, 100, 330, 140], fill=(46, 139, 87, 255))
-    elif "banana" in prompt_lower:
-        color = (240, 210, 40, 255) # Yellow
-        # Draw a beautiful curved banana crescent shape
-        for i in range(25):
-            t = i / 24.0
-            angle = -0.2 + t * 2.0  # -0.2 to 1.8 radians
-            x = 256 + int(120 * math.cos(angle))
-            y = 256 + int(80 * math.sin(angle))
-            r = int(35 * math.sin(t * math.pi)) + 10  # thicker in middle
-            draw.ellipse([x - r, y - r, x + r, y + r], fill=color)
-        # Brown stem/tips
-        draw.ellipse([256 + int(120 * math.cos(-0.2)) - 10, 256 + int(80 * math.sin(-0.2)) - 10, 256 + int(120 * math.cos(-0.2)) + 10, 256 + int(80 * math.sin(-0.2)) + 10], fill=(80, 60, 20, 255))
-        draw.ellipse([256 + int(120 * math.cos(1.8)) - 8, 256 + int(80 * math.sin(1.8)) - 8, 256 + int(120 * math.cos(1.8)) + 8, 256 + int(80 * math.sin(1.8)) + 8], fill=(80, 60, 20, 255))
+
+    if shape == "round":
+        # Sphere-like object: layered concentric ellipses for depth/shading
+        draw.ellipse([110, 110, 400, 400], fill=body_color)
+        draw.ellipse([140, 140, 370, 370], fill=detail_color)
+        draw.ellipse([170, 160, 310, 290], fill=accent_color)  # highlight
+    elif shape == "tall":
+        # Tall object (bottle, sword, tree trunk)
+        draw.ellipse([196, 300, 316, 420], fill=body_color)    # base
+        draw.rectangle([216, 120, 296, 330], fill=body_color)  # body
+        draw.ellipse([206, 100, 306, 160], fill=detail_color)  # top cap
+        draw.rectangle([226, 130, 286, 310], fill=detail_color) # center shine
+    elif shape == "wide":
+        # Wide object (chest, shield, book)
+        draw.rectangle([100, 180, 420, 360], fill=body_color)
+        draw.rectangle([120, 200, 400, 340], fill=detail_color)
+        draw.ellipse([200, 250, 310, 295], fill=accent_color)  # clasp/gem
+    elif shape == "shield":
+        # Shield / gem shape
+        points = [(256, 110), (390, 185), (340, 370), (256, 430), (172, 370), (122, 185)]
+        draw.polygon(points, fill=body_color)
+        inner = [(256, 145), (355, 200), (315, 350), (256, 400), (197, 350), (157, 200)]
+        draw.polygon(inner, fill=detail_color)
+        draw.ellipse([220, 240, 292, 310], fill=accent_color)
     else:
-        # Generic game item (e.g. blue potion or shield shape)
-        color = (50, 120, 200, 255) # Blue
-        # Draw shield/gem shape
-        points = [(256, 110), (370, 180), (330, 360), (256, 420), (182, 360), (142, 180)]
-        draw.polygon(points, fill=color)
-        # Draw an inner highlight
-        draw.polygon([(256, 140), (340, 190), (300, 340), (256, 390)], fill=(90, 160, 240, 255))
-        
+        # Default round
+        draw.ellipse([110, 110, 400, 400], fill=body_color)
+        draw.ellipse([150, 150, 360, 360], fill=detail_color)
+
+    # Optional stem and leaf
+    if design.get("has_stem"):
+        stem_color = rgb("stem_color")
+        draw.rectangle([245, 70, 265, 130], fill=stem_color)
+    if design.get("has_leaf"):
+        leaf_color = rgb("leaf_color")
+        draw.ellipse([260, 75, 330, 115], fill=leaf_color)
+
     img.save(output_filename)
     return output_filename
 
@@ -220,8 +288,13 @@ def generate_visual_asset(prompt: str, output_filename: str = "sprite.png", loca
         headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
         try:
             if not HF_API_TOKEN:
-                print("[!] Warning: HF_API_TOKEN not set. Skipping real API call and creating a mock image.")
-                return create_mock_sprite(prompt, output_filename)
+                print("[*] HF_API_TOKEN not set — running local SDXL on GPU...")
+                try:
+                    from local_sdxl import generate_sprite
+                    return generate_sprite(refined_prompt, output_filename, style=style)
+                except Exception as sdxl_e:
+                    print(f"[!] Local SDXL failed ({sdxl_e}), falling back to mock sprite.")
+                    return create_mock_sprite(prompt, output_filename, llm_model=image_model)
                 
             response = requests.post(HF_API_URL, headers=headers, json={"inputs": refined_prompt})
             response.raise_for_status()
@@ -235,7 +308,7 @@ def generate_visual_asset(prompt: str, output_filename: str = "sprite.png", loca
                 # final fallback
                 shutil.copy2(init_image_path, output_filename)
             else:
-                create_mock_sprite(prompt, output_filename)
+                create_mock_sprite(prompt, output_filename, llm_model=image_model)
             return output_filename
 
 def extract_data_from_image(image_path: str, model: str = "llama3.2-vision:11b-instruct-fp16") -> str:
@@ -256,7 +329,8 @@ def extract_data_from_image(image_path: str, model: str = "llama3.2-vision:11b-i
             "model": model,
             "prompt": system_prompt,
             "images": [encoded_string],
-            "stream": False
+            "stream": False,
+            "keep_alive": 0
         }
         
         response = requests.post(OLLAMA_API_URL, json=payload)
@@ -305,7 +379,8 @@ def agent_prompt_engineer(logic_data: dict, style: str, model: str = "llama3", f
     payload = {
         "model": model,
         "prompt": f"{system_prompt}\n\nJSON Concept:\n{json.dumps(logic_data, indent=2)}",
-        "stream": False
+        "stream": False,
+        "keep_alive": 0
     }
     
     try:
@@ -343,6 +418,7 @@ def validate_visual_asset(image_path: str, prompt: str, model: str = "llama3.2-v
             "prompt": system_prompt,
             "images": [encoded_string],
             "stream": False,
+            "keep_alive": 0,
             "format": "json"
         }
         
@@ -413,7 +489,10 @@ def agent_game_designer(prompt: str, model: str = "llama3", stateful: bool = Fal
         system_prompt = (
             "You are a game development AI. Generate the properties, states, and behavior of an interactive stateful game object based on the user's description.\n"
             "Output ONLY valid JSON representing the object. Do not include markdown blocks or any other text.\n"
-            "Include fields for: name, type, hp, speed, hitboxes (width, height).\n"
+            "Include fields for: name, type, hp, speed, hitboxes (width, height), material, visual_description, and sub_structures.\n"
+            "The 'material' should describe what the object is made of.\n"
+            "The 'visual_description' should explain exactly how it looks.\n"
+            "The 'sub_structures' must be a list of its parts (e.g., blade, handle) with their estimated lengths/dimensions in cm.\n"
             "Also include a 'states' object where keys are state names (e.g., 'unpeeled', 'peeled', 'eaten' for a banana; 'whole', 'bitten', 'core' for an apple).\n"
             "Each state should have: 'description', 'interactions' (list of interaction strings for this state).\n"
             "Also include a 'transitions' list where each item is an object with: 'from' (state), 'to' (state), and 'trigger' (the interaction name that causes the transition)."
@@ -422,13 +501,16 @@ def agent_game_designer(prompt: str, model: str = "llama3", stateful: bool = Fal
         system_prompt = (
             "You are a game development AI. Generate the properties and behavior of a game object based on the user's description. "
             "Output ONLY valid JSON representing the object. Do not include markdown blocks or any other text. "
-            "Include fields for: name, type, hp (if applicable), speed, hitboxes (width, height), and interactions (list of strings)."
+            "Include fields for: name, type, hp (if applicable), speed, hitboxes (width, height), material, visual_description, sub_structures, and interactions (list of strings). "
+            "The 'material' should describe what the object is made of. The 'visual_description' should explain exactly how it looks. "
+            "The 'sub_structures' must be a list of its parts (e.g., blade, handle) with their estimated lengths/dimensions in cm."
         )
     
     payload = {
         "model": model,
         "prompt": f"{system_prompt}\n\nDescription: {prompt}",
         "stream": False,
+        "keep_alive": 0,
         "format": "json"
     }
     
@@ -453,6 +535,13 @@ def agent_game_designer(prompt: str, model: str = "llama3", stateful: bool = Fal
                 "hp": 1,
                 "speed": 0,
                 "hitboxes": {"width": 1, "height": 1},
+                "material": "Organic flesh and peel",
+                "visual_description": "A curved, bright yellow fruit with a brown stem.",
+                "sub_structures": [
+                    {"name": "peel", "length": "18cm"},
+                    {"name": "flesh", "length": "17cm"},
+                    {"name": "stem", "length": "2cm"}
+                ],
                 "states": {
                     "unpeeled": {
                         "description": "A fresh whole banana, unpeeled.",
@@ -477,6 +566,13 @@ def agent_game_designer(prompt: str, model: str = "llama3", stateful: bool = Fal
                 "hp": 1,
                 "speed": 0,
                 "hitboxes": {"width": 1, "height": 1},
+                "material": "Organic flesh and peel",
+                "visual_description": "A curved, bright yellow fruit with a brown stem.",
+                "sub_structures": [
+                    {"name": "peel", "length": "18cm"},
+                    {"name": "flesh", "length": "17cm"},
+                    {"name": "stem", "length": "2cm"}
+                ],
                 "interactions": ["Peel", "Eat", "Examine"]
             }
         elif "apple" in name_lower:
@@ -486,6 +582,13 @@ def agent_game_designer(prompt: str, model: str = "llama3", stateful: bool = Fal
                 "hp": 1,
                 "speed": 0,
                 "hitboxes": {"width": 1, "height": 1},
+                "material": "Organic fruit matter",
+                "visual_description": "A round, shiny red fruit with a small brown stem and green leaf.",
+                "sub_structures": [
+                    {"name": "flesh", "length": "8cm"},
+                    {"name": "core", "length": "5cm"},
+                    {"name": "stem", "length": "1cm"}
+                ],
                 "states": {
                     "whole": {
                         "description": "A fresh whole red apple.",
@@ -510,6 +613,13 @@ def agent_game_designer(prompt: str, model: str = "llama3", stateful: bool = Fal
                 "hp": 5,
                 "speed": 0,
                 "hitboxes": {"width": 1, "height": 1},
+                "material": "Organic fruit matter",
+                "visual_description": "A round, shiny red fruit with a small brown stem and green leaf.",
+                "sub_structures": [
+                    {"name": "flesh", "length": "8cm"},
+                    {"name": "core", "length": "5cm"},
+                    {"name": "stem", "length": "1cm"}
+                ],
                 "interactions": ["Eat", "Examine"]
             }
         else:
@@ -519,6 +629,11 @@ def agent_game_designer(prompt: str, model: str = "llama3", stateful: bool = Fal
                 "hp": 10,
                 "speed": 0,
                 "hitboxes": {"width": 1, "height": 1},
+                "material": "Unknown",
+                "visual_description": "A generic object.",
+                "sub_structures": [
+                    {"name": "main_body", "length": "10cm"}
+                ],
                 "interactions": ["Examine"]
             }
             if stateful:
@@ -572,7 +687,7 @@ def main():
     parser.add_argument("--style", type=str, default="pixel-art", choices=["pixel-art", "vector-hand-drawn", "low-poly", "realistic-high-poly", "cel-shaded-stylized", "voxels", "isometric-2.5d", "particle-systems"], help="Visual style of the game object")
     parser.add_argument("--stateful", action="store_true", help="Generate state-based variations and transitions for the object")
     parser.add_argument("--image_model", type=str, default="sdxl", choices=["sdxl", "flux"], help="The image generation model to use locally (sdxl or flux)")
-    parser.add_argument("--true_3d", action="store_true", help="Generate a native 3D mesh model using Shap-E (bypasses 2D voxel extrusion)")
+
     
     args = parser.parse_args()
     
@@ -666,169 +781,100 @@ def main():
         sprite_filename = os.path.join(output_dir, f"{clean_name}_sprite.png")
         model_filename = os.path.join(output_dir, f"{clean_name}_model.obj")
         
-        if args.true_3d:
-            # 1. Generate the High Quality 2D Reference Image via Reflexion Loop
-            print("[*] Generating 2D reference image for Image-to-3D...")
-            generate_visual_asset_with_reflexion(base_visual_prompt, logic_data, sprite_filename, args)
-            
-            # 2. Clean the background
-            if os.path.exists(sprite_filename):
-                try:
-                    from pixel_processor import post_process_sprite
-                    post_process_sprite(sprite_filename, args.style, None)
-                except Exception as e:
-                    print(f"[!] Sprite post-processing failed: {e}")
-            
-            # 3. Feed the clean 2D image into TripoSR
-            print("[*] Generating True AAA 3D Model using TripoSR...")
-            from triposr_generator import generate_triposr_mesh
-            obj_path, albedo_path = generate_triposr_mesh(sprite_filename, output_dir, clean_name)
-            
-            logic_data["sprite_url"] = f"/generated_assets/{args.style}/{clean_name}_{timestamp}/{clean_name}_sprite.png"
-            logic_data["model_3d"] = f"/generated_assets/{args.style}/{clean_name}_{timestamp}/{clean_name}_model.obj"
-            logic_data["style"] = "native-3d"
-            
-            # 4. Generate PBR Suite from TripoSR Albedo Map
-            try:
-                import pbr_generator
-                base_pbr_path = os.path.join(output_dir, f"{clean_name}")
-                print(f"[*] Generating PBR Suite from TripoSR Albedo Map ({albedo_path})...")
-                pbr_maps = pbr_generator.generate_pbr_suite(albedo_path, base_pbr_path)
-                
-                # 5. Connect PBR to MTL
-                mtl_path = os.path.join(output_dir, f"{clean_name}_model.mtl")
-                with open(mtl_path, 'w') as f:
-                    f.write(f"newmtl BakeMat\n")
-                    f.write(f"Ka 1.000 1.000 1.000\n")
-                    f.write(f"Kd 1.000 1.000 1.000\n")
-                    f.write(f"Ks 0.500 0.500 0.500\n")
-                    f.write(f"map_Kd {os.path.basename(albedo_path)}\n")
-                    f.write(f"map_Bump -bm 1.0 {os.path.basename(pbr_maps['normal'])}\n")
-                    f.write(f"map_Pr {os.path.basename(pbr_maps['roughness'])}\n")
-                    f.write(f"map_Pm {os.path.basename(pbr_maps['metallic'])}\n")
-                    f.write(f"map_Ka {os.path.basename(pbr_maps['ao'])}\n")
-                    
-                # Update OBJ to link MTL
-                with open(obj_path, 'r') as f:
-                    obj_data = f.read()
-                with open(obj_path, 'w') as f:
-                    f.write(f"mtllib {os.path.basename(mtl_path)}\n")
-                    f.write(obj_data)
-                    
-            except Exception as e:
-                print(f"[!] PBR Generation failed: {e}")
-                
-            logic_data["model_3d"] = obj_path
-            
-        elif args.style == "voxels":
-            # === LLM-DRIVEN VOXEL CONSTRUCTION + VLM JUDGE LOOP ===
-            # 1. LLM generates box primitives for the object
-            # 2. Build voxel .obj from primitives
-            # 3. Render from 4 angles, VLM identifies each angle
-            # 4. If VLM can't recognize it -> feed feedback to LLM -> fix & retry
-            
-            from voxel_builder import query_llm_for_primitives, refine_primitives_with_feedback
-            from voxel_validator import validate_3d_model
-            
-            voxel_model_path = os.path.join(output_dir, f"{clean_name}_model.obj")
-            max_voxel_attempts = 10
-            primitives = None
-            validation = {"passed": False, "score": 0.0, "details": []}
-            
-            for voxel_attempt in range(1, max_voxel_attempts + 1):
-                print(f"\n{'='*50}")
-                print(f"[*] 3D REFLEXION LOOP: Attempt {voxel_attempt}/{max_voxel_attempts}")
-                print(f"{'='*50}")
-                
-                # Step 1: Get primitives (first attempt = fresh, subsequent = refined)
-                if voxel_attempt == 1 or primitives is None:
-                    print(f"[*] Step 1/3: Getting 3D structure from LLM...")
-                    primitives = query_llm_for_primitives(active_prompt, model=args.llm_model)
-                else:
-                    print(f"[*] Step 1/3: Refining 3D structure based on VLM feedback...")
-                    primitives = refine_primitives_with_feedback(
-                        active_prompt,
-                        primitives,
-                        validation["details"],
-                        model=args.llm_model
-                    )
-                
-                # Step 2: Build voxel model
-                print(f"[*] Step 2/3: Building voxel model from {len(primitives)} primitives...")
-                voxelize_from_primitives(
-                    primitives,
-                    voxel_model_path,
-                    grid_size=48
-                )
-                
-                # Step 3: Validate with VLM judge
-                print(f"[*] Step 3/3: VLM Judge evaluating 3D model...")
-                validation = validate_3d_model(
-                    voxel_model_path, 
-                    active_prompt,
-                    output_dir=output_dir
-                )
-                
-                if validation["passed"]:
-                    print(f"\n[+] 3D Model APPROVED by VLM Judge! (score: {validation['score']:.0%})")
-                    break
-                else:
-                    if voxel_attempt < max_voxel_attempts:
-                        print(f"\n[!] 3D Model REJECTED by VLM Judge (score: {validation['score']:.0%})")
-                        print(f"    Feeding feedback to LLM for correction...")
-                    else:
-                        print(f"\n[-] 3D Reflexion exhausted. Best score: {validation['score']:.0%}")
-            
-            # Generate a voxel-style sprite for display/thumbnail
-            print("\n[*] Generating voxel-style sprite...")
-            generate_visual_asset_with_reflexion(base_visual_prompt, logic_data, sprite_filename, args)
-            if os.path.exists(sprite_filename):
-                try:
-                    from pixel_processor import post_process_sprite
-                    post_process_sprite(sprite_filename, args.style, None)
-                except Exception as e:
-                    print(f"[!] Sprite post-processing failed: {e}")
-            
-            logic_data["sprite_url"] = f"/generated_assets/{args.style}/{clean_name}_{timestamp}/{clean_name}_sprite.png"
-            logic_data["model_3d"] = f"/generated_assets/{args.style}/{clean_name}_{timestamp}/{clean_name}_model.obj"
-            logic_data["style"] = "voxels"
-            logic_data["validation_score"] = validation.get("score", 0.0)
-            
+        # 1. Provide the High Quality 2D Reference Image
+        print("[*] Preparing 2D reference image for Image-to-3D...")
+        if args.image and os.path.exists(args.image):
+            import shutil
+            shutil.copy2(args.image, sprite_filename)
         else:
-            # Agent 3 & Critic (Reflexion Loop)
             generate_visual_asset_with_reflexion(base_visual_prompt, logic_data, sprite_filename, args)
+        
+        # 2. Clean the background
+        if os.path.exists(sprite_filename):
+            try:
+                from pixel_processor import post_process_sprite
+                post_process_sprite(sprite_filename, args.style, None)
+            except Exception as e:
+                print(f"[!] Sprite post-processing failed: {e}")
+        
+        # 3. Mathematically Extrude the 2D image into 3D (Bypassing Broken Neural Networks)
+        print("[*] Generating True AAA 3D Model using Algorithmic Math Extrusion...")
+        from algorithmic_3d import generate_algorithmic_mesh
+        obj_path, albedo_path = generate_algorithmic_mesh(sprite_filename, output_dir, clean_name)
+        
+        logic_data["sprite_url"] = f"/generated_assets/{args.style}/{clean_name}_{timestamp}/{clean_name}_sprite.png"
+        logic_data["model_3d"] = f"/generated_assets/{args.style}/{clean_name}_{timestamp}/{clean_name}_model.obj"
+        logic_data["style"] = "native-3d"
+        
+        # 4. Generate PBR Suite from TripoSR Albedo Map
+        try:
+            import pbr_generator
+            base_pbr_path = os.path.join(output_dir, f"{clean_name}")
+            print(f"[*] Generating PBR Suite from Albedo Map ({albedo_path})...")
+            pbr_maps = pbr_generator.generate_pbr_suite(albedo_path, base_pbr_path)
             
-            # Agent 4 (Pixel Processor)
-            if os.path.exists(sprite_filename):
-                try:
-                    from pixel_processor import post_process_sprite
-                    ref_dir = os.path.join("reference_datasets", clean_name)
-                    if not os.path.exists(ref_dir):
-                        ref_dir = None
-                    post_process_sprite(sprite_filename, args.style, ref_dir)
-                except Exception as e:
-                    print(f"[!] Sprite post-processing failed: {e}")
-                    
-            # Extrude to 3D OBJ
-            print("[*] Extruding 2D sprite to 3D model...")
-            try:
-                extrude_sprite_to_voxel_obj(sprite_filename, model_filename, style=args.style)
-            except Exception as e:
-                print(f"[!] 3D extrusion failed: {e}")
+            # 5. Connect PBR to MTL
+            mtl_path = os.path.join(output_dir, f"{clean_name}_model.mtl")
+            with open(mtl_path, 'w') as f:
+                f.write(f"newmtl BakeMat\n")
+                f.write(f"Ka 1.000 1.000 1.000\n")
+                f.write(f"Kd 1.000 1.000 1.000\n")
+                f.write(f"Ks 0.500 0.500 0.500\n")
+                f.write(f"map_Kd {os.path.basename(albedo_path)}\n")
+                f.write(f"map_Bump -bm 1.0 {os.path.basename(pbr_maps['normal'])}\n")
+                f.write(f"map_Pr {os.path.basename(pbr_maps['roughness'])}\n")
+                f.write(f"map_Pm {os.path.basename(pbr_maps['metallic'])}\n")
+                f.write(f"map_Ka {os.path.basename(pbr_maps['ao'])}\n")
                 
-            # Agent 6 (PBR Material Creator): Generate Unity-Ready Texture Maps
-            try:
-                import pbr_generator
-                base_pbr_path = os.path.join(output_dir, f"{clean_name}")
-                pbr_maps = pbr_generator.generate_pbr_suite(sprite_filename, base_pbr_path)
-                mtl_filename = os.path.join(output_dir, f"{clean_name}_model.mtl")
-                pbr_generator.create_mtl_file(mtl_filename, f"{clean_name}_model_material", pbr_maps)
-                logic_data["pbr_maps"] = pbr_maps
-            except Exception as e:
-                print(f"[!] PBR Generation failed: {e}")
+            # Update OBJ to link MTL
+            with open(obj_path, 'r') as f:
+                obj_data = f.read()
+            with open(obj_path, 'w') as f:
+                f.write(f"mtllib {os.path.basename(mtl_path)}\n")
+                f.write(obj_data)
                 
-            logic_data["sprite_url"] = f"/generated_assets/{args.style}/{clean_name}_{timestamp}/{clean_name}_sprite.png"
-            logic_data["model_3d"] = f"/generated_assets/{args.style}/{clean_name}_{timestamp}/{clean_name}_model.obj"
+        except Exception as e:
+            print(f"[!] PBR Generation failed: {e}")
+            
+        logic_data["model_3d"] = obj_path
+        
+        logic_data["sprite_url"] = f"/generated_assets/{args.style}/{clean_name}_{timestamp}/{clean_name}_sprite.png"
+        logic_data["model_3d"] = f"/generated_assets/{args.style}/{clean_name}_{timestamp}/{clean_name}_model.obj"
+        logic_data["style"] = "native-3d"
+        
+        # 4. Generate PBR Suite from Shap-E Albedo Map
+        try:
+            import pbr_generator
+            base_pbr_path = os.path.join(output_dir, f"{clean_name}")
+            print(f"[*] Generating PBR Suite from Albedo Map ({albedo_path})...")
+            pbr_maps = pbr_generator.generate_pbr_suite(albedo_path, base_pbr_path)
+            
+            # 5. Connect PBR to MTL
+            mtl_path = os.path.join(output_dir, f"{clean_name}_model.mtl")
+            with open(mtl_path, 'w') as f:
+                f.write(f"newmtl BakeMat\n")
+                f.write(f"Ka 1.000 1.000 1.000\n")
+                f.write(f"Kd 1.000 1.000 1.000\n")
+                f.write(f"Ks 0.500 0.500 0.500\n")
+                f.write(f"map_Kd {os.path.basename(albedo_path)}\n")
+                f.write(f"map_Bump -bm 1.0 {os.path.basename(pbr_maps['normal'])}\n")
+                f.write(f"map_Pr {os.path.basename(pbr_maps['roughness'])}\n")
+                f.write(f"map_Pm {os.path.basename(pbr_maps['metallic'])}\n")
+                f.write(f"map_Ka {os.path.basename(pbr_maps['ao'])}\n")
+                
+            # Update OBJ to link MTL
+            with open(obj_path, 'r') as f:
+                obj_data = f.read()
+            with open(obj_path, 'w') as f:
+                f.write(f"mtllib {os.path.basename(mtl_path)}\n")
+                f.write(obj_data)
+                
+        except Exception as e:
+            print(f"[!] PBR Generation failed: {e}")
+            
+        logic_data["model_3d"] = obj_path
+            
+        logic_data["sprite_url"] = f"/generated_assets/{args.style}/{clean_name}_{timestamp}/{clean_name}_sprite.png"
 
     # Inject metadata & write final JSON
     logic_data["style"] = args.style

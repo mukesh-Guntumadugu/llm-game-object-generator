@@ -91,26 +91,9 @@ def extrude_sprite_to_voxel_obj(sprite_path, output_obj_path, target_size=None, 
         # We will use the depth map to shift the center of the voxel column!
         depth_offset = (depth_normalized - 0.5) * (max_thickness_cap * 1.5)
         
-        # QUANTIZE the depth and thickness to create flat "voxel terraces" 
-        # Adaptive Clarity: 
-        # - Edges (low distance transform) should have high clarity (low quantize_step).
-        # - Core (high distance transform) should have low clarity (high quantize_step).
-        base_quantize = max(2, int(max_thickness_cap * 0.25)) 
-        
-        max_dist = np.max(distances) if np.any(distances) else 0
-        if max_dist > 0:
-            norm_dist = np.clip(distances / max_thickness_cap, 0.0, 1.0)
-            quantize_map = 1 + np.round(norm_dist * (base_quantize - 1))
-        else:
-            quantize_map = np.ones_like(distances) * base_quantize
-            
-        quantize_map = np.maximum(quantize_map, 1)
-        
-        offset_int = np.round(depth_offset / quantize_map) * quantize_map
-        offset_int = offset_int.astype(int)
-        
-        thickness_int = np.round(base_thickness / quantize_map) * quantize_map
-        thickness_int = np.maximum(thickness_int.astype(int), 1) # Minimum 1 voxel thick
+        offset_int = np.round(depth_offset).astype(int)
+        thickness_int = np.round(base_thickness).astype(int)
+        thickness_int = np.maximum(thickness_int, 1) # Minimum 1 voxel thick
         
         # Compute the bounding box of Z to size the grid
         max_t = int(np.max(thickness_int)) if np.any(thickness_int) else 0

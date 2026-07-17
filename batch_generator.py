@@ -287,7 +287,10 @@ def generate_logic(prompt, model, output_path, stateful=False):
         system_prompt = (
             "You are a game development AI. Generate the properties, states, and behavior of an interactive stateful game object based on the user's description.\n"
             "Output ONLY valid JSON representing the object. Do not include markdown blocks or any other text.\n"
-            "Include fields for: name, type, hp, speed, hitboxes (width, height).\n"
+            "Include fields for: name, type, hp, speed, hitboxes (width, height), material, visual_description, and sub_structures.\n"
+            "The 'material' should describe what the object is made of.\n"
+            "The 'visual_description' should explain exactly how it looks.\n"
+            "The 'sub_structures' must be a list of its parts (e.g., blade, handle) with their estimated lengths/dimensions in cm.\n"
             "Also include a 'states' object where keys are state names (e.g., 'unpeeled', 'peeled', 'eaten' for a banana; 'whole', 'bitten', 'core' for an apple).\n"
             "Each state should have: 'description', 'interactions' (list of interaction strings for this state).\n"
             "Also include a 'transitions' list where each item is an object with: 'from' (state), 'to' (state), and 'trigger' (the interaction name that causes the transition)."
@@ -296,7 +299,9 @@ def generate_logic(prompt, model, output_path, stateful=False):
         system_prompt = (
             "You are a game development AI. Generate the properties and behavior of a game object based on the user's description. "
             "Output ONLY valid JSON representing the object. Do not include markdown blocks or any other text. "
-            "Include fields for: name, type, hp, speed, hitboxes (width, height), and interactions (list of strings)."
+            "Include fields for: name, type, hp, speed, hitboxes (width, height), material, visual_description, sub_structures, and interactions (list of strings). "
+            "The 'material' should describe what the object is made of. The 'visual_description' should explain exactly how it looks. "
+            "The 'sub_structures' must be a list of its parts (e.g., blade, handle) with their estimated lengths/dimensions in cm."
         )
     payload = {
         "model": model,
@@ -324,6 +329,13 @@ def generate_logic(prompt, model, output_path, stateful=False):
                 "hp": 1,
                 "speed": 0,
                 "hitboxes": {"width": 1, "height": 1},
+                "material": "Organic flesh and peel",
+                "visual_description": "A curved, bright yellow fruit with a brown stem.",
+                "sub_structures": [
+                    {"name": "peel", "length": "18cm"},
+                    {"name": "flesh", "length": "17cm"},
+                    {"name": "stem", "length": "2cm"}
+                ],
                 "states": {
                     "unpeeled": {
                         "description": "A fresh whole banana, unpeeled.",
@@ -348,6 +360,13 @@ def generate_logic(prompt, model, output_path, stateful=False):
                 "hp": 1,
                 "speed": 0,
                 "hitboxes": {"width": 1, "height": 1},
+                "material": "Organic flesh and peel",
+                "visual_description": "A curved, bright yellow fruit with a brown stem.",
+                "sub_structures": [
+                    {"name": "peel", "length": "18cm"},
+                    {"name": "flesh", "length": "17cm"},
+                    {"name": "stem", "length": "2cm"}
+                ],
                 "interactions": ["Peel", "Eat", "Examine"]
             }
         elif "apple" in name_lower:
@@ -357,6 +376,13 @@ def generate_logic(prompt, model, output_path, stateful=False):
                 "hp": 1,
                 "speed": 0,
                 "hitboxes": {"width": 1, "height": 1},
+                "material": "Organic fruit matter",
+                "visual_description": "A round, shiny red fruit with a small brown stem and green leaf.",
+                "sub_structures": [
+                    {"name": "flesh", "length": "8cm"},
+                    {"name": "core", "length": "5cm"},
+                    {"name": "stem", "length": "1cm"}
+                ],
                 "states": {
                     "whole": {
                         "description": "A fresh whole red apple.",
@@ -381,6 +407,13 @@ def generate_logic(prompt, model, output_path, stateful=False):
                 "hp": 5,
                 "speed": 0,
                 "hitboxes": {"width": 1, "height": 1},
+                "material": "Organic fruit matter",
+                "visual_description": "A round, shiny red fruit with a small brown stem and green leaf.",
+                "sub_structures": [
+                    {"name": "flesh", "length": "8cm"},
+                    {"name": "core", "length": "5cm"},
+                    {"name": "stem", "length": "1cm"}
+                ],
                 "interactions": ["Eat", "Examine"]
             }
         else:
@@ -390,6 +423,11 @@ def generate_logic(prompt, model, output_path, stateful=False):
                 "hp": 10,
                 "speed": 0,
                 "hitboxes": {"width": 1, "height": 1},
+                "material": "Unknown",
+                "visual_description": "A generic object.",
+                "sub_structures": [
+                    {"name": "main_body", "length": "10cm"}
+                ],
                 "interactions": ["Examine"]
             }
             if stateful:
